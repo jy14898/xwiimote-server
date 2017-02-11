@@ -1,4 +1,5 @@
 # xwiimote-server
+Might also want https://github.com/dvdhrm/xwiimote/blob/master/res/50-xorg-fix-xwiimote.conf 
 
 ##INSTALL INSTRUCTIONS (for python bindings)
 
