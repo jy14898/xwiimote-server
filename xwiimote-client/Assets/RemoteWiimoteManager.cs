@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using System;
 using System.Text;
+using WebSocketSharp;
 
 /**
  * Do the talkin with the Wiimotes
@@ -15,7 +16,7 @@ using System.Text;
  **/
 public class RemoteWiimoteManager {
 	private static UdpClient udpClient = null;
-	private static TcpClient tcpClient = null;
+	private static WebSocket ws = null;
 	private static IPEndPoint endPoint = null;
 	private static bool connected = false;
 
@@ -56,12 +57,26 @@ public class RemoteWiimoteManager {
 	}
 
 	// Setup TCP and UDP connections
-	public static void start(){
+	public static void start(string ip, int port){
+		ws = new WebSocket ("ws://192.168.0.12:9000");
+			
 		if (!connected) {
-			endPoint = new IPEndPoint (IPAddress.Any, 9000);
-			udpClient = new UdpClient (endPoint);
+			Debug.Log("pls1?");
 
-			udpClient.BeginReceive (new AsyncCallback (RecieveUDP), null);
+			ws.OnMessage += (sender, e) => 
+				Debug.Log("pls?"+ e.Data);
+			
+			ws.OnOpen += (sender, e) => {
+				Debug.Log("pls?");
+			};
+			ws.Connect ();
+			ws.Send ("Hello :)");
+
+//			endPoint = new IPEndPoint (IPAddress.Any, 9000);
+//			udpClient = new UdpClient (endPoint);
+//
+//			udpClient.BeginReceive (new AsyncCallback (RecieveUDP), null);
+
 
 			connected = true;
 		}
