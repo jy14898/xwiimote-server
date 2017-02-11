@@ -59,18 +59,20 @@ p = select.poll()
 # watched wiimotes
 wiimotes = {'all':[]}
 
-# 1 way socket for now
-# can we listen to any UDP on the port? dont really care about who it came from
-# for rumble
+# really udp should send to all TCP IP addresses
+udpSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#ip = input('IP: ')
+#port = int(input('PORT: '))
 
-# Maybe we want two connections, UDP and TCP
-# TCP for button presses, UDP for IR and ACCEL
-# for now use UDP
+server.bind(('',9000))
+server.listen()
 
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-ip = input('IP: ')
-port = int(input('PORT: '))
-# sock.bind((ip,int(port)))
+READ_ONLY = select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR
+READ_WRITE = READ_ONLY | select.POLLOUT
+
+# Do we need POLLOUT?
+p.register(server, READ_ONLY)
 
 try:
     mon = xwiimote.monitor(True, True)
@@ -91,27 +93,46 @@ p.register(mon_fd, select.POLLIN)
 revt = xwiimote.event()
 
 # Test index
-index = 0;
+index = 0
 
-# When it comes to it, I believe we can poll UDP too
+clients = []
+
+tcpTypes = {
+    'WIIMOTE_CONNECTED'    : 0,
+    'WIIMOTE_DISCONNECTED' : 1,
+}
+
 try:
     while True:
         polls = p.poll()
 
         # for all events
         for fd, evt in polls:
+            if fd == server.fileno():
+                # To accept connections
+                if evt & (select.POLLIN | select.POLLPRI):
+                    connection, client_address = server.accept()
+                    print("New connection {}.".format(client_address))
+                    connection.setblocking(0)
+                    clients.append(connection)
+                    p.register(connection, READ_ONLY)
+
+            elif fd in [c.fileno() for c in clients]:
+                if evt & (select.POLLIN | select.POLLPRI):
+                    client = [c for c in clients if c.fileno() == fd][0]
+
+                    data = client.recv(1)
+                    if(data):
+                        print(data)
 
             # monitor
-            if fd == mon_fd:
+            elif fd == mon_fd:
                 newmotes = read_monitor(mon, wiimotes)
                 for dev in newmotes:
                     p.register(dev.get_fd(), select.POLLIN)
 
-                    # message = {
-                    #     'type':'connect'
-                    # }
-                    #
-                    # sock.sendto(bytes(json.dumps(message),'utf-8'),(ip,port));
+                    for c in clients:
+                        client.send(struct.pack("i",tcpTypes["WIIMOTE_CONNECTED"]))
 
                     if len(newmotes) > 0:
                         print_wiimotes(wiimotes)
@@ -128,11 +149,8 @@ try:
                                 p.unregister(dev.get_fd())
                                 remove_device(wiimotes, dev)
 
-                                # message = {
-                                #     'type':'disconnect'
-                                # }
-                                #
-                                # sock.sendto(bytes(json.dumps(message),'utf-8'),(ip,port));
+                                for c in clients:
+                                    client.send(struct.pack("i",tcpTypes["WIIMOTE_DISCONNECTED"]))
 
                             elif revt.type == xwiimote.EVENT_KEY:
                                 (code, state) = revt.get_key()
@@ -150,7 +168,7 @@ try:
                                 for i in [0, 1, 2, 3]:
                                     if revt.ir_is_valid(i):
                                         x, y, z = revt.get_abs(i)
-                                        sock.sendto(struct.pack("iiiiii",int(1),int(index),int(i),int(x),int(y),int(z)),(ip,port))
+                                        udpSock.sendto(struct.pack("iiiiii",int(1),int(index),int(i),int(x),int(y),int(z)),(ip,port))
                                         index += 1
                                 # message = {
                                 #     'type':'ir'
@@ -180,6 +198,8 @@ try:
                                 remove_device(wiimotes, dev)
 except KeyboardInterrupt:
     print("exiting...")
+
+# server.close()
 
 # cleaning
 for dev in wiimotes['all']:
