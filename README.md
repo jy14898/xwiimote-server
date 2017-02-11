@@ -1,6 +1,6 @@
 # xwiimote-server
 
-https://github.io/barnabuskev/wiicop
+https://github.com/barnabuskev/wiicop
 
 Follow above to install python bindings
 
