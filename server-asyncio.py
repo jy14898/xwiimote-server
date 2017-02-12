@@ -61,16 +61,19 @@ def wiimote_event(dev):
     if event.type == xwiimote.EVENT_KEY:
         (code, state) = event.get_key()
 
+        # key=2, fd, code, state
         for websocket in connections:
-            asyncio.ensure_future(websocket.send("KeyChange {} {} {}".format(dev.get_syspath(), code, state)))
+            asyncio.ensure_future(websocket.send(struct.pack("iiii",2,dev.get_fd(),code,state)))
+            # asyncio.ensure_future(websocket.send("KeyChange {} {} {}".format(dev.get_syspath(), code, state)))
 
     elif event.type == xwiimote.EVENT_GONE:
         loop.remove_reader(dev.get_fd())
 
         remove_device(wiimotes, dev)
 
+        # disconnect=1, fd
         for websocket in connections:
-            asyncio.ensure_future(websocket.send("Wiimote disconnected: {}".format(dev.get_syspath())))
+            asyncio.ensure_future(websocket.send(struct.pack("ii",1,dev.get_fd())))
     # elif event.type == xwiimote.EVENT_IR:
         # send over UDP
 
@@ -81,15 +84,31 @@ def wiimote_monitor_event():
         loop.add_reader(dev.get_fd(), functools.partial(wiimote_event, dev))
 
         for websocket in connections:
-            asyncio.ensure_future(websocket.send("Wiimote connected: {}".format(dev.get_syspath())))
-
+            # connected, fd
+            asyncio.ensure_future(websocket.send(struct.pack("ii",0,dev.get_fd())))
 
 
 async def handle(websocket,path):
     connections.append(websocket)
     while True:
         message = await websocket.recv()
-        print("Got a message" + message)
+        # wiimotes['all'][0].rumble(True)
+        if type(message) == bytes:
+            # making some bad assumptions here?
+            print(len(message))
+            message_type = struct.unpack("i",message[:4])[0]
+            print(message_type)
+            # rumble
+            if message_type == 1:
+                fd, state = struct.unpack_from("ii",message[4:16])
+                print(fd,state)
+                for dev in wiimotes['all']:
+                    if dev.get_fd() == fd:
+                        dev.rumble(state == 1)
+
+        elif message is str:
+            print("Got a s message" + message)
+            #
 
 wiimote_monitor_event()
 
