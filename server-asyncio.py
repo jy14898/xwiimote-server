@@ -6,6 +6,13 @@ import struct
 import asyncio
 import functools
 import websockets
+import socket
+import signal
+
+# watched wiimotes
+wiimotes = []
+connections = []
+udpSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 def print_wiimote(dev):
     print("syspath:" + dev.get_syspath())
@@ -24,7 +31,7 @@ def read_monitor(mon, wiimotes):
     while wiimote_path is not None:
         try:
             dev = xwiimote.iface(wiimote_path)
-            wiimotes['all'].append(dev)
+            wiimotes.append(dev)
             # enable rumble and IR
             dev.open(dev.available() | xwiimote.IFACE_WRITABLE | xwiimote.IFACE_IR )
             newmotes.append(dev)
@@ -34,22 +41,10 @@ def read_monitor(mon, wiimotes):
     return newmotes
 
 def remove_device(wiimotes, dev):
-    for devtype, devlist in wiimotes.items():
-        if dev in devlist:
-            devlist.remove(dev)
-            dev.close(xwiimote.IFACE_WRITABLE)
-
-# watched wiimotes
-wiimotes = {'all':[]}
-connections = []
-
-try:
-    mon = xwiimote.monitor(True, True)
-except SystemError as e:
-    print("ooops, cannot create monitor (", e, ")")
-    exit(1)
-
-loop = asyncio.get_event_loop()
+    if dev in wiimotes:
+        wiimotes.remove(dev)
+        # Do i need to specify IR here?
+        dev.close(xwiimote.IFACE_WRITABLE  | xwiimote.IFACE_IR )
 
 def wiimote_event(dev):
     event = xwiimote.event()
@@ -74,10 +69,15 @@ def wiimote_event(dev):
         # disconnect=1, fd
         for websocket in connections:
             asyncio.ensure_future(websocket.send(struct.pack("ii",1,dev.get_fd())))
-    # elif event.type == xwiimote.EVENT_IR:
+    elif event.type == xwiimote.EVENT_IR:
         # send over UDP
+        for i in [0, 1, 2, 3]:
+            if event.ir_is_valid(i):
+                x, y, z = event.get_abs(i)
+                for websocket in connections:
+                    udpSock.sendto(struct.pack("iiiii",int(1),int(i),int(x),int(y),int(z)),(websocket.remote_address[0],9001))
 
-def wiimote_monitor_event():
+def _wiimote_monitor_event(mon,loop):
     newmotes = read_monitor(mon, wiimotes)
 
     for dev in newmotes:
@@ -90,19 +90,23 @@ def wiimote_monitor_event():
 
 async def handle(websocket,path):
     connections.append(websocket)
+    for dev in wiimotes:
+        # connected, fd
+        asyncio.ensure_future(websocket.send(struct.pack("ii",0,dev.get_fd())))
+
     while True:
         message = await websocket.recv()
-        # wiimotes['all'][0].rumble(True)
+
+        # Cant we just ask the mssage for like .isBinary?
         if type(message) == bytes:
             # making some bad assumptions here?
-            print(len(message))
             message_type = struct.unpack("i",message[:4])[0]
-            print(message_type)
+
             # rumble
             if message_type == 1:
                 fd, state = struct.unpack_from("ii",message[4:16])
-                print(fd,state)
-                for dev in wiimotes['all']:
+
+                for dev in wiimotes:
                     if dev.get_fd() == fd:
                         dev.rumble(state == 1)
 
@@ -110,19 +114,43 @@ async def handle(websocket,path):
             print("Got a s message" + message)
             #
 
+try:
+    mon = xwiimote.monitor(True, True)
+except SystemError as e:
+    print("ooops, cannot create monitor (", e, ")")
+    exit(1)
+
+loop = asyncio.get_event_loop()
+
+wiimote_monitor_event = functools.partial(_wiimote_monitor_event,mon,loop)
+
+# get current wiimotes
 wiimote_monitor_event()
 
-start_server = websockets.serve(handle, '192.168.0.12', 9000)
 
-loop.run_until_complete(start_server)
+print("Starting websocket server")
+start_server = websockets.serve(handle, '', 9000)
+server_task = loop.run_until_complete(start_server)
+print("Websocket server started")
+
+# def sigint_handler():
+#     print('Stopping')
+#
+#     server_task.close()
+#
+#     for task in asyncio.Task.all_tasks():
+#         task.cancel()
+#
+# loop.add_signal_handler(signal.SIGINT, sigint_handler)
+
+
+print("Monitoring wiimote events")
 loop.add_reader(mon.get_fd(False), wiimote_monitor_event)
 
+print("Starting event loop")
 loop.run_forever()
 
-
 # cleaning
-for dev in wiimotes['all']:
-    # p.unregister(dev.get_fd())
+for dev in wiimotes:
     remove_device(wiimotes, dev)
-# p.unregister(mon_fd)
 exit(0)
