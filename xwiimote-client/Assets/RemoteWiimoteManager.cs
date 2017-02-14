@@ -21,6 +21,8 @@ public class RemoteWiimoteManager {
 
 	private static void RecieveUDP(IAsyncResult ar) {
 		Byte[] bytes = udpClient.EndReceive (ar, ref endPoint);
+	
+		Debug.Log ("GOT A MESSAGE :D");
 
 //		int type = BitConverter.ToInt32 (bytes, 0);
 //		int index = BitConverter.ToInt32 (bytes, 4);
@@ -109,10 +111,10 @@ public class RemoteWiimoteManager {
 
 			ws.Connect ();
 
-//			endPoint = new IPEndPoint (IPAddress.Any, 9000);
-//			udpClient = new UdpClient (endPoint);
-//
-//			udpClient.BeginReceive (new AsyncCallback (RecieveUDP), null);
+			endPoint = new IPEndPoint (IPAddress.Any, 9001);
+			udpClient = new UdpClient (endPoint);
+
+			udpClient.BeginReceive (new AsyncCallback (RecieveUDP), null);
 		}
 	}
 
