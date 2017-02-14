@@ -7,12 +7,18 @@ public class TestBehaviourScript : MonoBehaviour {
 
 	// Use this for initialization
 	void Start () {
-//		Wiimote w = new Wiimote ("UNIQUE-ID");
-//		w.keys.change += (keycode, state) => {
-//			Debug.Log(keycode + ":" + state);
-//		};
-//
-//		w.keys[Wiimote.Keys.Key.key_code.XWII_KEY_A] = true;
+		RemoteWiimoteManager.wiimoteConnect += (Wiimote wiimote) => {
+			wiimote.keys.change += (keycode, state) => {
+				Debug.Log (keycode + ":" + state);
+
+				if(keycode == Wiimote.Keys.Key.key_code.XWII_KEY_A){
+					wiimote.rumble = state;
+				}
+			};
+
+			
+		};
+
 		RemoteWiimoteManager.start(IP,9000);
 	}
 	

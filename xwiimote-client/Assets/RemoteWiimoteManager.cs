@@ -7,13 +7,7 @@ using System;
 using System.Text;
 using WebSocketSharp;
 
-/**
- * Do the talkin with the Wiimotes
- * Provide unique identifiers?
- * Produce wiimote objects
- * Allow WiimoteSubscribers
- * 
- **/
+
 public class RemoteWiimoteManager {
 	private static UdpClient udpClient = null;
 	private static WebSocket ws = null;
@@ -21,6 +15,9 @@ public class RemoteWiimoteManager {
 	private static bool connected = false;
 
 	private static List<Wiimote> wiimotes = new List<Wiimote>();
+
+	public delegate void WiimoteConnectHandler(Wiimote wiimote);
+	public static event WiimoteConnectHandler wiimoteConnect;
 
 	private static void RecieveUDP(IAsyncResult ar) {
 		Byte[] bytes = udpClient.EndReceive (ar, ref endPoint);
@@ -56,29 +53,66 @@ public class RemoteWiimoteManager {
 		udpClient.BeginReceive (new AsyncCallback (RecieveUDP), null);
 	}
 
+	public static void setRumble(Wiimote wm, bool state){
+		List<Byte> bytes = new List<Byte> ();
+
+		bytes.AddRange (BitConverter.GetBytes ((Int32)1));
+		bytes.AddRange (BitConverter.GetBytes ((Int32)wm.ID));
+		bytes.AddRange (BitConverter.GetBytes ((Int32)(state?1:0)));
+		Debug.Log (BitConverter.ToString(bytes.ToArray ()));
+		ws.Send(bytes.ToArray());
+	}
+
 	// Setup TCP and UDP connections
 	public static void start(string ip, int port){
-		ws = new WebSocket ("ws://192.168.0.12:9000");
+		ws = new WebSocket ("ws://"+ip+":"+port);
 			
 		if (!connected) {
-			Debug.Log("pls1?");
+			ws.OnMessage += (sender, e) => {
+				Byte[] bytes = e.RawData;
+				int type = BitConverter.ToInt32 (bytes, 0);
 
-			ws.OnMessage += (sender, e) => 
-				Debug.Log("pls?"+ e.Data);
+				switch(type){
+				case 0:
+					{
+						int fd = BitConverter.ToInt32 (bytes, 4);
+
+						// TODO: Check if fd already exists in list?
+						Wiimote wm = new Wiimote(fd);
+						wiimotes.Add(wm);
+
+						// Call the event
+						wiimoteConnect(wm);
+					}
+					break;
+				case 1:
+					break;
+				case 2:
+					{
+						int fd = BitConverter.ToInt32 (bytes, 4);
+						Wiimote wm = wiimotes.Find(_wm => _wm.ID == fd);
+
+						Wiimote.Keys.Key.key_code key_code = (Wiimote.Keys.Key.key_code)BitConverter.ToInt32 (bytes, 8);
+						bool key_state = BitConverter.ToInt32 (bytes, 12) == 1;
+						wm.keys[key_code] = key_state;
+					}
+					break;
+				default:
+					break;
+				}
+//				Debug.Log ();
+			};
 			
 			ws.OnOpen += (sender, e) => {
-				Debug.Log("pls?");
+				connected = true;
 			};
+
 			ws.Connect ();
-			ws.Send ("Hello :)");
 
 //			endPoint = new IPEndPoint (IPAddress.Any, 9000);
 //			udpClient = new UdpClient (endPoint);
 //
 //			udpClient.BeginReceive (new AsyncCallback (RecieveUDP), null);
-
-
-			connected = true;
 		}
 	}
 
@@ -201,7 +235,7 @@ public class Wiimote {
 	public Keys keys = new Keys ();
 	public IRData irData = new IRData ();
 
-	public readonly string ID;
+	public readonly int ID;
 
 	public bool rumble 
 	{
@@ -213,10 +247,8 @@ public class Wiimote {
 		set 
 		{
 			// Send rumble signal
-			if (value) 
-				Debug.Log ("Rumble!");
-			else
-				Debug.Log ("No rumble!");
+			// Could possibly do this a ncier way, oh well
+			RemoteWiimoteManager.setRumble(this, value);
 			
 			_rumble = value;
 		}
@@ -224,7 +256,7 @@ public class Wiimote {
 
 	private bool _rumble = false;
 
-	public Wiimote(string ID){
+	public Wiimote(int ID){
 		this.ID = ID;
 	}
 }
