@@ -1,11 +1,11 @@
 # xwiimote-server
-Might also want https://github.com/dvdhrm/xwiimote/blob/master/res/50-xorg-fix-xwiimote.conf 
-Probably need pip3 install websockets
+Might also want https://github.com/dvdhrm/xwiimote/blob/master/res/50-xorg-fix-xwiimote.conf if you have a desktop environment running
+
 ##INSTALL INSTRUCTIONS (for python bindings)
 
-1. Go to [here](https://github.com/dvdhrm/xwiimote) to download the zip file containing the xwiimote software and unzip it in a suitable directory. Or clone using git.
+1. Go to [xwiimote](https://github.com/dvdhrm/xwiimote) and clone using git.
 
-2. Go to [here](https://github.com/dvdhrm/xwiimote-bindings) to download the zip file containing the xwiimote bindings and unzip it another directory. Or clone using git.
+2. Go to [xwiimote-bindings](https://github.com/dvdhrm/xwiimote-bindings) and clone using git.
 
 3. Install the following dependencies (ubuntu based distributions) via:
 
@@ -13,7 +13,7 @@ Probably need pip3 install websockets
 
 4. Install python modules: 
 
-    `sudo pip3 install pyudev`
+    `sudo pip3 install pyudev websockets`
 
 5. Compile and install xwiimote library.
 Change (cd) to xwiimote directory (xwiimote-master), then run:
