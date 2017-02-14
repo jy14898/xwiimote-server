@@ -1,6 +1,6 @@
 # xwiimote-server
 Might also want https://github.com/dvdhrm/xwiimote/blob/master/res/50-xorg-fix-xwiimote.conf 
-
+Probably need pip3 install websockets
 ##INSTALL INSTRUCTIONS (for python bindings)
 
 1. Go to [here](https://github.com/dvdhrm/xwiimote) to download the zip file containing the xwiimote software and unzip it in a suitable directory. Or clone using git.
@@ -11,9 +11,9 @@ Might also want https://github.com/dvdhrm/xwiimote/blob/master/res/50-xorg-fix-x
 
     `sudo apt-get install libudev-dev libncurses5-dev libncursesw5-dev autoconf autogen libtool swig python3-dev python3-tk python3-pip`
 
-4. Install python modules:
+4. Install python modules: 
 
-    `sudo pip3 install pyudev pandas matplotlib`
+    `sudo pip3 install pyudev`
 
 5. Compile and install xwiimote library.
 Change (cd) to xwiimote directory (xwiimote-master), then run:
