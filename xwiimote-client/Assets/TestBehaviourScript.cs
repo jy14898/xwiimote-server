@@ -9,39 +9,49 @@ public class TestBehaviourScript : MonoBehaviour {
 	public Transform t3;
 	public Transform t4;
 
-	private Vector3 p1 = new Vector3();
-	private Vector3 p2 = new Vector3();
-	private Vector3 p3 = new Vector3();
-	private Vector3 p4 = new Vector3();
+	private Vector2 p1 = new Vector2();
+	private Vector2 p2 = new Vector2();
+	private Vector2 p3 = new Vector2();
+	private Vector2 p4 = new Vector2();
 
 
 	// Use this for initialization
 	void Start () {
-		XWiimoteManager.wiimoteConnect += (Wiimote wiimote) => {
-			wiimote.keys.change += (keycode, state) => {
+		XWiimoteClient.wiimoteConnect += (XWiimoteEvents wiimote) => {
+			Debug.Log("Wiimote ID" + wiimote.ID + " connected.");
+
+			wiimote.keyChange += (keycode, state) => {
 				Debug.Log (keycode + ":" + state);
 
-				if(keycode == Wiimote.Keys.code.XWII_KEY_A){
-					wiimote.rumble = state;
+				if(keycode == XWiimoteEvents.KeyCode.XWII_KEY_A){
+					XWiimoteClient.setRumble(wiimote.ID, state == 1);
 				}
 			};
 				
-			wiimote.irData.change += (irData) => {
-				p1 = new Vector3(irData[0].x,irData[0].y,0)/100.0f;
-				p2 = new Vector3(irData[1].x,irData[1].y,0)/100.0f;
-				p3 = new Vector3(irData[2].x,irData[2].y,0)/100.0f;
-				p4 = new Vector3(irData[3].x,irData[3].y,0)/100.0f;
+			wiimote.irChange += (irData) => {
+				p1 = new Vector2(irData[0].x,irData[0].y)/10.0f;
+				p2 = new Vector2(irData[1].x,irData[1].y)/10.0f;
+				p3 = new Vector2(irData[2].x,irData[2].y)/10.0f;
+				p4 = new Vector2(irData[3].x,irData[3].y)/10.0f;
+			};
+
+			wiimote.disconnect += () => {
+				Debug.Log("Wiimote ID" + wiimote.ID + " disconnected.");
 			};
 		};
 
-		XWiimoteManager.start(IP,9000);
+		XWiimoteClient.start(IP,9000);
 	}
-	
-	// Update is called once per frame
-	void Update () {
-		t1.position = p1;
-		t2.position = p2;
-		t3.position = p3;
-		t4.position = p4;
+
+	void OnGUI() {
+		GUI.Box (new Rect (p1,new Vector2(1,1)), "1");
+		GUI.Box (new Rect (p2,new Vector2(1,1)), "2");
+		GUI.Box (new Rect (p3,new Vector2(1,1)), "3");
+		GUI.Box (new Rect (p4,new Vector2(1,1)), "4");
+
+	}
+
+	void OnDisable(){
+		XWiimoteClient.stop ();
 	}
 }
