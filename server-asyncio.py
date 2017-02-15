@@ -8,6 +8,7 @@ import functools
 import websockets
 import socket
 import signal
+import serverutils
 
 # watched wiimotes
 wiimotes = []
@@ -46,6 +47,23 @@ def remove_device(wiimotes, dev):
         # Do i need to specify IR here?
         dev.close(xwiimote.IFACE_WRITABLE  | xwiimote.IFACE_IR )
 
+handled_events = {
+    xwiimote.EVENT_IR,
+    xwiimote.EVENT_ACCEL,
+    xwiimote.EVENT_KEY,
+    xwiimote.EVENT_GONE
+}
+
+def send_udp(message):
+    for websocket in connections:
+        if websocket.open:
+            udpSock.sendto(message,(websocket.remote_address[0],9001))
+
+def send_ws(message):
+    for websocket in connections:
+        if websocket.open:
+            asyncio.ensure_future(websocket.send(message))
+
 def wiimote_event(dev):
     event = xwiimote.event()
     try:
@@ -53,29 +71,22 @@ def wiimote_event(dev):
     except BlockingIOError:
         return
 
-    if event.type == xwiimote.EVENT_KEY:
-        (code, state) = event.get_key()
+    if event.type not in handled_events:
+        return
 
-        # key=2, fd, code, state
-        for websocket in connections:
-            asyncio.ensure_future(websocket.send(struct.pack("iiii",2,dev.get_fd(),code,state)))
-            # asyncio.ensure_future(websocket.send("KeyChange {} {} {}".format(dev.get_syspath(), code, state)))
+    message = bytearray(struct.pack("<?i",False,dev.get_fd()))
+    message.extend(serverutils.xwiimote_event_to_bytearray(event))
+    message_bytes = bytes(message)
 
-    elif event.type == xwiimote.EVENT_GONE:
-        loop.remove_reader(dev.get_fd())
 
-        remove_device(wiimotes, dev)
+    if event.type == xwiimote.EVENT_ACCEL or event.type == xwiimote.EVENT_MOTION_PLUS or event.type == xwiimote.EVENT_IR:
+        send_udp(message_bytes)
+    else:
+        send_ws(message_bytes)
 
-        # disconnect=1, fd
-        for websocket in connections:
-            asyncio.ensure_future(websocket.send(struct.pack("ii",1,dev.get_fd())))
-    elif event.type == xwiimote.EVENT_IR:
-        # send over UDP
-        for i in [0, 1, 2, 3]:
-            if event.ir_is_valid(i):
-                x, y, z = event.get_abs(i)
-                for websocket in connections:
-                    udpSock.sendto(struct.pack("iiiii",int(1),int(i),int(x),int(y),int(z)),(websocket.remote_address[0],9001))
+    if event.type == xwiimote.EVENT_GONE:
+        remove_device(wiimotes,dev)
+
 
 def _wiimote_monitor_event(mon,loop):
     newmotes = read_monitor(mon, wiimotes)
@@ -84,35 +95,37 @@ def _wiimote_monitor_event(mon,loop):
         loop.add_reader(dev.get_fd(), functools.partial(wiimote_event, dev))
 
         for websocket in connections:
-            # connected, fd
-            asyncio.ensure_future(websocket.send(struct.pack("ii",0,dev.get_fd())))
+            asyncio.ensure_future(websocket.send(struct.pack("<?i",True,dev.get_fd())))
 
 
 async def handle(websocket,path):
     connections.append(websocket)
+    print("Client connected")
+
     for dev in wiimotes:
-        # connected, fd
-        asyncio.ensure_future(websocket.send(struct.pack("ii",0,dev.get_fd())))
+        asyncio.ensure_future(websocket.send(struct.pack("<?i",True,dev.get_fd())))
 
-    while True:
-        message = await websocket.recv()
+    try:
+        while True:
+            message = await websocket.recv()
 
-        # Cant we just ask the mssage for like .isBinary?
-        if type(message) == bytes:
-            # making some bad assumptions here?
-            message_type = struct.unpack("i",message[:4])[0]
+            if type(message) == bytes:
+                message_type = struct.unpack("<i",message[:4])[0]
 
-            # rumble
-            if message_type == 1:
-                fd, state = struct.unpack_from("ii",message[4:16])
+                # rumble
+                if message_type == 1:
+                    fd, state = struct.unpack_from("<ii",message[4:16])
 
-                for dev in wiimotes:
-                    if dev.get_fd() == fd:
-                        dev.rumble(state == 1)
+                    for dev in wiimotes:
+                        if dev.get_fd() == fd:
+                            dev.rumble(state == 1)
 
-        elif message is str:
-            print("Got a s message" + message)
-            #
+            elif message is str:
+                print("Got a s message" + message)
+
+    except websockets.exceptions.ConnectionClosed as e:
+        print("Client disconnected")
+        connections.remove(websocket)
 
 try:
     mon = xwiimote.monitor(True, True)
